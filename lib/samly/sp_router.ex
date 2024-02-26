@@ -22,9 +22,11 @@ defmodule Samly.SPRouter do
   # Hmm - if we handle the logout out response we won't have a session with a relay_state/target_url
   # so... let's just make something work and move on.
   get "/logout/*idp_id_seg" do
+    dbg(conn.params)
+
     case conn.params["idp_id_seg"] do
       # HCA - after logout log in again
-      "hca-" <> lol ->
+      ["hca-" <> lol] ->
         conn
         |> Plug.Conn.put_resp_header(
           "location",

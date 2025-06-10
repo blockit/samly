@@ -1,0 +1,60 @@
+name: Elixir CI
+
+on: push
+
+env:
+  MIX_ENV: "test"
+
+jobs:
+  setup:
+    runs-on:
+      group: organization/Default
+    name: Set up
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        otp: ["26.0.2"]
+        elixir: ["1.16.2"]
+
+    steps:
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          elixir-version: ${{matrix.elixir}}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache deps
+        id: cache-deps
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-elixir-deps
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+
+      - name: Cache compiled build
+        id: cache-build
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-compiled-build
+        with:
+          path: _build
+          key: ${{ runner.os }}-mix-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('**/mix.lock', 'apps/blockit_web/lib/blockit_web/live/directory/theme/**') }}
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Compiles without warnings
+        run: mix compile --warnings-as-errors
+
+      - name: Check Formatting
+        run: mix format --check-formatted
+
+      - name: Documentation has no warnings
+        run: mix docs 2>&1 | tee mix-docs.txt
+
+      - name: Run tests
+        run: mix test

@@ -1,11 +1,5 @@
 [
-  inputs: [
-    "mix.exs",
-    "{config,lib,test}/**/*.{ex,exs}"
-  ],
-
-  locals_without_parens: [
-    plug: 1,
-    plug: 2
-  ]
+  plugins: [Styler],
+  inputs: ["*.{heex,ex,exs}", "{config,lib,test}/**/*.{heex,ex,exs}"],
+  line_length: 120
 ]

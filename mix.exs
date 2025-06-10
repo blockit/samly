@@ -3,8 +3,7 @@ defmodule Samly.Mixfile do
 
   @version "1.0.0"
   @description "SAML Single-Sign-On Authentication for Plug/Phoenix Applications"
-  @source_url "https://github.com/handnot2/samly"
-  @blog_url "https://handnot2.github.io/blog/auth/saml-auth-for-phoenix"
+  @source_url "https://github.com/blockit/samly"
 
   def project() do
     [
@@ -13,7 +12,7 @@ defmodule Samly.Mixfile do
       description: @description,
       docs: docs(),
       package: package(),
-      elixir: "~> 1.6",
+      elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
@@ -31,9 +30,10 @@ defmodule Samly.Mixfile do
     [
       {:plug, "~> 1.6"},
       {:esaml, "~> 4.2"},
-      {:sweet_xml, "~> 0.6.6"},
-      {:ex_doc, "~> 0.19.0", only: :dev, runtime: false},
-      {:inch_ex, "~> 1.0", only: [:dev, :test]}
+      {:sweet_xml, "~> 0.7.5"},
+      {:ex_doc, "~> 0.38.2", only: :dev, runtime: false},
+      {:inch_ex, "~> 2.0.0", only: [:dev, :test]},
+      {:styler, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -48,12 +48,11 @@ defmodule Samly.Mixfile do
 
   defp package() do
     [
-      maintainers: ["handnot2"],
+      maintainers: ["blockit", "handnot2"],
       files: ["config", "lib", "LICENSE", "mix.exs", "README.md"],
       licenses: ["MIT"],
       links: %{
-        "GitHub" => @source_url,
-        "Blog" => @blog_url
+        "GitHub" => @source_url
       }
     ]
   end

@@ -48,9 +48,7 @@ defmodule Samly.Provider do
           value
 
         unknown ->
-          Logger.warning(
-            "[Samly] invalid_data idp_id_from: #{inspect(unknown)}. Using :path_segment"
-          )
+          Logger.warning("[Samly] invalid_data idp_id_from: #{inspect(unknown)}. Using :path_segment")
 
           :path_segment
       end

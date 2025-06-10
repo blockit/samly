@@ -90,9 +90,7 @@ defmodule Samly.SpData do
       %SpData{sp_data | cert: cert}
     rescue
       _error ->
-        Logger.error(
-          "[Samly] Failed load SP certfile [#{inspect(certfile)}]: #{inspect(opts_map)}"
-        )
+        Logger.error("[Samly] Failed load SP certfile [#{inspect(certfile)}]: #{inspect(opts_map)}")
 
         %SpData{sp_data | valid?: false}
     end

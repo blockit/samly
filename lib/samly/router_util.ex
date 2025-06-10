@@ -39,9 +39,7 @@ defmodule Samly.RouterUtil do
       conn |> Conn.put_private(:samly_target_url, target_url)
     rescue
       ArgumentError ->
-        Logger.error(
-          "[Samly] target_url must be x-www-form-urlencoded: #{inspect(conn.params["target_url"])}"
-        )
+        Logger.error("[Samly] target_url must be x-www-form-urlencoded: #{inspect(conn.params["target_url"])}")
 
         conn |> Conn.send_resp(400, "target_url must be x-www-form-urlencoded") |> Conn.halt()
     end

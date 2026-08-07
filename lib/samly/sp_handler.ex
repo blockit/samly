@@ -34,7 +34,7 @@ defmodule Samly.SPHandler do
     saml_response = conn.body_params["SAMLResponse"]
     relay_state = conn.body_params["RelayState"] |> safe_decode_www_form()
 
-    with {:ok, assertion} <- Helper.decode_idp_auth_resp(sp, saml_encoding, saml_response),
+    with {:ok, assertion} <- decode_idp_auth_resp(sp, saml_encoding, saml_response),
          :ok <- validate_authresp(conn, assertion, relay_state),
          assertion = %Assertion{assertion | idp_id: idp_id},
          conn = conn |> put_private(:samly_assertion, assertion),
@@ -54,14 +54,109 @@ defmodule Samly.SPHandler do
       |> redirect(302, target_url)
     else
       {:halted, conn} -> conn
-      {:error, reason} -> conn |> send_resp(403, "access_denied #{inspect(reason)}")
-      _ -> conn |> send_resp(403, "access_denied")
+      {:error, reason} -> handle_consume_error(conn, reason)
+      _ -> handle_consume_error(conn, :access_denied)
     end
 
     # rescue
     #   error ->
     #     Logger.error("#{inspect error}")
     #     conn |> send_resp(500, "request_failed")
+  end
+
+  # Session-loss shaped failures: the browser lost or replaced the session state
+  # between signin and consume (replayed response, second login tab, dropped
+  # cookie). A fresh signin usually succeeds without the user re-entering
+  # credentials because the IdP still holds a live SSO session.
+  @recoverable_reasons [:invalid_relay_state, :invalid_idp_id, :invalid_target_url]
+
+  # Marks a signin round-trip that was already auto-retried. It rides in the
+  # RelayState, which the IdP echoes back to us, so the loop guard holds even
+  # when our session cookie is the thing that's broken.
+  @retry_marker "retry_"
+
+  def retry_marker, do: @retry_marker
+
+  def handle_consume_error(conn, reason) do
+    relay_state = conn.body_params["RelayState"] |> safe_decode_www_form()
+    retried? = String.starts_with?(relay_state, @retry_marker)
+
+    Logger.warning(
+      "[Samly] signin consume failed reason=#{inspect(reason)} " <>
+        "idp=#{conn.private[:samly_idp].id} retried=#{retried?}"
+    )
+
+    if reason in @recoverable_reasons and not retried? do
+      redirect(conn, 302, signin_url(conn, true))
+    else
+      conn
+      |> put_resp_header("content-type", "text/html")
+      |> send_resp(403, error_page(signin_url(conn, false), reason))
+    end
+  end
+
+  defp signin_url(conn, retry?) do
+    %IdpData{id: idp_id, base_url: base_url} = conn.private[:samly_idp]
+
+    base_url =
+      base_url ||
+        URI.to_string(%URI{
+          scheme: Atom.to_string(conn.scheme),
+          host: conn.host,
+          port: conn.port,
+          path: "/sso"
+        })
+
+    idp_segment =
+      if Application.get_env(:samly, :idp_id_from) == :subdomain, do: "", else: "/#{idp_id}"
+
+    "#{base_url}/auth/signin#{idp_segment}" <> if retry?, do: "?samly_retry=1", else: ""
+  end
+
+  defp error_page(signin_url, reason) do
+    """
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <title>Sign-in problem</title>
+        <style>
+          body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                 background: #f8fafc; color: #0f172a; display: flex; align-items: center;
+                 justify-content: center; min-height: 100vh; margin: 0; }
+          .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+                  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08); max-width: 26rem;
+                  padding: 2rem; text-align: center; }
+          h1 { font-size: 1.25rem; margin: 0 0 0.75rem; }
+          p { color: #475569; font-size: 0.9375rem; line-height: 1.5; margin: 0 0 1.5rem; }
+          a.button { background: #0f172a; border-radius: 8px; color: #fff; display: inline-block;
+                     font-size: 0.9375rem; padding: 0.625rem 1.25rem; text-decoration: none; }
+          .reason { color: #94a3b8; font-size: 0.75rem; margin-top: 1.5rem; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>We couldn't complete your sign-in</h1>
+          <p>
+            This can happen if the sign-in page was refreshed or open in more than
+            one tab, or if your browser blocked cookies during login. Signing in
+            again usually fixes it.
+          </p>
+          <a class="button" href="#{signin_url}">Try signing in again</a>
+          <div class="reason">Error code: #{reason}</div>
+        </div>
+      </body>
+    </html>
+    """
+  end
+
+  # esaml raises on malformed base64/XML rather than returning an error tuple;
+  # without this a garbled IdP response turns into a 500 instead of the error page.
+  defp decode_idp_auth_resp(sp, saml_encoding, saml_response) do
+    Helper.decode_idp_auth_resp(sp, saml_encoding, saml_response)
+  rescue
+    _ -> {:error, :malformed_response}
   end
 
   # IDP-initiated flow auth response

@@ -30,6 +30,9 @@ defmodule Samly.AuthHandler do
         <%= if target_url do %>
         <input type=\"hidden\" name=\"target_url\" value=\"<%= target_url %>\" />
         <% end %>
+        <%= if retry do %>
+        <input type=\"hidden\" name=\"samly_retry\" value=\"1\" />
+        <% end %>
         <input type=\"hidden\" name=\"_csrf_token\" value=\"<%= csrf_token %>\" />
         <noscript><input type=\"submit\" value=\"Submit\" /></noscript>
       </form>
@@ -46,6 +49,7 @@ defmodule Samly.AuthHandler do
       nonce: conn.private[:samly_nonce],
       action: URI.encode(conn.request_path),
       target_url: URI.encode_www_form(target_url),
+      retry: conn.params["samly_retry"] == "1",
       csrf_token: get_csrf_token()
     ]
 
@@ -67,7 +71,15 @@ defmodule Samly.AuthHandler do
         conn |> redirect(302, target_url)
 
       _ ->
-        relay_state = State.gen_id()
+        # The retry marker survives the IdP round trip inside the RelayState, so
+        # the consume endpoint can tell a first failure (auto-retry) from a
+        # repeat one (error page) even when the session cookie doesn't make it.
+        relay_state =
+          if conn.params["samly_retry"] == "1" do
+            Samly.SPHandler.retry_marker() <> State.gen_id()
+          else
+            State.gen_id()
+          end
 
         {idp_signin_url, req_xml_frag} =
           Helper.gen_idp_signin_req(sp, idp_rec, Map.get(idp, :nameid_format))
